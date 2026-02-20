@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -41,6 +42,7 @@
             font-size: 3rem;
             font-weight: 800;
             background: linear-gradient(to right, #667eea, #764ba2);
+            background-clip: text;
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             letter-spacing: -1px;
@@ -51,6 +53,30 @@
             color: #636e72;
             font-size: 1.1rem;
         }
+
+        .counter {
+            margin-top: 1.5rem;
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: #2d3436;
+        }
+
+        .increment-btn {
+            margin-top: 1rem;
+            padding: 0.7rem 1.4rem;
+            border: none;
+            border-radius: 12px;
+            background: #667eea;
+            color: white;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .increment-btn:hover {
+            background: #5a6fd6;
+        }
     </style>
 </head>
 <body>
@@ -58,7 +84,20 @@
     <div class="card">
         <h2>Hello World!</h2>
         <p>Welcome to your beautiful new interface.</p>
+        <div class="counter">Count: <span id="counter-value">0</span></div>
+        <button id="increment-btn" class="increment-btn" type="button">Increment</button>
     </div>
+
+    <script>
+        let count = 0;
+        const counterValue = document.getElementById('counter-value');
+        const incrementButton = document.getElementById('increment-btn');
+
+        incrementButton.addEventListener('click', function () {
+            count += 1;
+            counterValue.textContent = count;
+        });
+    </script>
 
 </body>
 </html>
