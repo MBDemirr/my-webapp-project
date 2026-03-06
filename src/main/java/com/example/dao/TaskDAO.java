@@ -9,6 +9,15 @@ public class TaskDAO {
 	private final String dbUrl;
 
 	public TaskDAO(String filePath) {
+		// Load SQLite driver
+		try {
+			Class.forName("org.sqlite.JDBC");
+			System.out.println("[TaskDAO] SQLite JDBC driver loaded successfully");
+		} catch (ClassNotFoundException e) {
+			System.err.println("[TaskDAO] Failed to load SQLite JDBC driver: " + e.getMessage());
+			e.printStackTrace(System.err);
+		}
+		
 		// make sure parent directories exist and file is created so SQLite can open it
 		java.io.File f = new java.io.File(filePath);
 		java.io.File parent = f.getParentFile();
@@ -28,9 +37,11 @@ public class TaskDAO {
 			String sql = "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT, completed INTEGER)";
 			try (Statement stmt = conn.createStatement()) {
 				stmt.execute(sql);
+				System.out.println("[TaskDAO] table created or already exists");
 			}
 		} catch (SQLException e) {
-			e.printStackTrace();
+			System.err.println("[TaskDAO] Failed to initialize database: " + e.getMessage());
+			e.printStackTrace(System.err);
 		}
 	}
 
@@ -80,9 +91,12 @@ public class TaskDAO {
 			 PreparedStatement pstmt = conn.prepareStatement(sql)) {
 			pstmt.setString(1, task.getTitle());
 			pstmt.setInt(2, task.isCompleted() ? 1 : 0);
-			return pstmt.executeUpdate() > 0;
+			int rowsAffected = pstmt.executeUpdate();
+			System.out.println("[TaskDAO] addTask: inserted " + rowsAffected + " rows for task: " + task);
+			return rowsAffected > 0;
 		} catch (SQLException e) {
-			e.printStackTrace();
+			System.err.println("[TaskDAO] addTask failed: " + e.getMessage());
+			e.printStackTrace(System.err);
 		}
 		return false;
 	}
@@ -94,9 +108,12 @@ public class TaskDAO {
 			pstmt.setString(1, task.getTitle());
 			pstmt.setInt(2, task.isCompleted() ? 1 : 0);
 			pstmt.setInt(3, task.getId());
-			return pstmt.executeUpdate() > 0;
+			int rowsAffected = pstmt.executeUpdate();
+			System.out.println("[TaskDAO] updateTask: updated " + rowsAffected + " rows for task: " + task);
+			return rowsAffected > 0;
 		} catch (SQLException e) {
-			e.printStackTrace();
+			System.err.println("[TaskDAO] updateTask failed: " + e.getMessage());
+			e.printStackTrace(System.err);
 		}
 		return false;
 	}

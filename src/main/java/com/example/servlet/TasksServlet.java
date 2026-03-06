@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.List;
@@ -21,28 +22,18 @@ public class TasksServlet extends HttpServlet {
 
 	@Override
 	public void init() throws ServletException {
-		// determine location for SQLite file inside WEB-INF so it's writable
-		String dbPath = getServletContext().getRealPath("/WEB-INF/todo.db");
-		getServletContext().log("[TasksServlet] DB path: '" + dbPath + "' length=" + (dbPath==null?0:dbPath.length()));
-		if (dbPath != null) {
-			StringBuilder codePoints = new StringBuilder();
-			for (int i = 0; i < dbPath.length(); i++) {
-				codePoints.append((int) dbPath.charAt(i)).append(" ");
-			}
-			getServletContext().log("[TasksServlet] DB path codepoints: " + codePoints);
-		}
+		// Use system temp directory for the database file for reliability
+		String tempDir = System.getProperty("java.io.tmpdir");
+		String dbPath = tempDir + File.separator + "my-webapp-todo.db";
+		
+		System.out.println("[TasksServlet] Database path: " + dbPath);
+		getServletContext().log("[TasksServlet] Database path: " + dbPath);
+		
 		taskDAO = new TaskDAO(dbPath);
-		// check whether SQLite file exists now that DAO has connected
-		java.io.File dbFile = new java.io.File(dbPath);
-		getServletContext().log("[TasksServlet] DB file exists after DAO init: " + dbFile.exists() + " (" + dbFile.getAbsolutePath() + ")");
-		// try to create the file manually to test permissions
-		try {
-			boolean created = dbFile.createNewFile();
-			getServletContext().log("[TasksServlet] manual createNewFile returned: " + created);
-		} catch (java.io.IOException e) {
-			getServletContext().log("[TasksServlet] manual file creation failed", e);
-		}
 		gson = new Gson();
+		
+		System.out.println("[TasksServlet] Initialization complete");
+		getServletContext().log("[TasksServlet] Initialization complete");
 	}
 
 	@Override
@@ -61,25 +52,39 @@ public class TasksServlet extends HttpServlet {
 					out.print(taskToJson(task));
 				} else {
 					resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+					out.print("{\"error\":\"Task not found\"}");
 				}
 			} catch (NumberFormatException e) {
 				resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+				out.print("{\"error\":\"Invalid task ID\"}");
 			}
 		}
 	}
 
 	@Override
 	protected void doPost(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+		resp.setContentType("application/json");
 		Task task = parseTaskFromRequest(req);
-		if (task != null && taskDAO.addTask(task)) {
-			resp.setStatus(HttpServletResponse.SC_CREATED);
-		} else {
+		if (task == null) {
 			resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+			resp.getWriter().print("{\"error\":\"Invalid request: missing or invalid task data (title is required)\"}");
+			return;
+		}
+		getServletContext().log("[TasksServlet] attempting to add task: " + task);
+		if (taskDAO.addTask(task)) {
+			getServletContext().log("[TasksServlet] task added successfully");
+			resp.setStatus(HttpServletResponse.SC_CREATED);
+			resp.getWriter().print(taskToJson(task));
+		} else {
+			getServletContext().log("[TasksServlet] taskDAO.addTask returned false");
+			resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+			resp.getWriter().print("{\"error\":\"Failed to create task - database error\"}");
 		}
 	}
 
 	@Override
 	protected void doPut(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+		resp.setContentType("application/json");
 		String pathInfo = req.getPathInfo();
 		if (pathInfo != null && pathInfo.length() > 1) {
 			try {
@@ -89,22 +94,28 @@ public class TasksServlet extends HttpServlet {
 					task.setId(id);
 					if (taskDAO.updateTask(task)) {
 						resp.setStatus(HttpServletResponse.SC_OK);
+						resp.getWriter().print(taskToJson(task));
 					} else {
 						resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+						resp.getWriter().print("{\"error\":\"Task not found\"}");
 					}
 				} else {
 					resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+					resp.getWriter().print("{\"error\":\"Invalid request: missing or invalid task data (title is required)\"}");
 				}
 			} catch (NumberFormatException e) {
 				resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+				resp.getWriter().print("{\"error\":\"Invalid task ID\"}");
 			}
 		} else {
 			resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+			resp.getWriter().print("{\"error\":\"Task ID is required\"}");
 		}
 	}
 
 	@Override
 	protected void doDelete(HttpServletRequest req, HttpServletResponse resp) throws ServletException, IOException {
+		resp.setContentType("application/json");
 		String pathInfo = req.getPathInfo();
 		if (pathInfo != null && pathInfo.length() > 1) {
 			try {
@@ -113,12 +124,15 @@ public class TasksServlet extends HttpServlet {
 					resp.setStatus(HttpServletResponse.SC_NO_CONTENT);
 				} else {
 					resp.setStatus(HttpServletResponse.SC_NOT_FOUND);
+					resp.getWriter().print("{\"error\":\"Task not found\"}");
 				}
 			} catch (NumberFormatException e) {
 				resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+				resp.getWriter().print("{\"error\":\"Invalid task ID\"}");
 			}
 		} else {
 			resp.setStatus(HttpServletResponse.SC_BAD_REQUEST);
+			resp.getWriter().print("{\"error\":\"Task ID is required\"}");
 		}
 	}
 
@@ -131,16 +145,28 @@ public class TasksServlet extends HttpServlet {
 		}
 		String body = sb.toString();
 		getServletContext().log("[TasksServlet] received body: " + body);
+		
+		if (body == null || body.trim().isEmpty()) {
+			getServletContext().log("[TasksServlet] request body is empty");
+			return null;
+		}
+		
 		try {
 			Task t = gson.fromJson(body, Task.class);
 			// ensure required field
-			if (t != null && t.getTitle() != null) {
-				return t;
+			if (t == null) {
+				getServletContext().log("[TasksServlet] failed to parse task - gson returned null");
+				return null;
 			}
+			if (t.getTitle() == null || t.getTitle().trim().isEmpty()) {
+				getServletContext().log("[TasksServlet] task title is null or empty");
+				return null;
+			}
+			return t;
 		} catch (JsonSyntaxException e) {
-			// ignore, will return null
+			getServletContext().log("[TasksServlet] JSON parsing error: " + e.getMessage(), e);
+			return null;
 		}
-		return null;
 	}
 
 	// older regex-based parsing removed; gson used instead

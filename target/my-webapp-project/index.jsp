@@ -94,13 +94,7 @@
     </div>
 
     <script>
-        // expose context path to client JS
-        window.CONTEXT_PATH = '${pageContext.request.contextPath}';
-    </script>
-    <script src="${pageContext.request.contextPath}/js/app.js"></script>
-
-    <script>
-        // Use JSP context path so client works under any deployment name
+        // Set context path from JSP for client-side API calls
         window.CONTEXT_PATH = '${pageContext.request.contextPath}';
     </script>
     <script>
